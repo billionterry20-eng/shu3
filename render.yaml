@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: step-auto-submit-flask
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DB_PATH
+        value: /var/data/step_scheduler/data.db
+      - key: DEFAULT_PHONE
+        value: Tbh2356@163.com
+      - key: DEFAULT_PWD
+        value: 112233qq
+      - key: DEFAULT_STEPS
+        value: "89888"
+      - key: DEFAULT_SUBMIT_TIME
+        value: "00:05"
+      - key: STEP_AUTH_TOKEN
+        value: 5aa77abb20f11a5e7f2440747a655a55
+      - key: STEP_API_URL
+        value: http://8.140.250.130/king/api/step
+      - key: STEP_REFERER
+        value: http://8.140.250.130/bushu/
+      - key: STEP_ORIGIN
+        value: http://8.140.250.130
+    disk:
+      name: step-auto-submit-disk
+      mountPath: /var/data
+      sizeGB: 1
