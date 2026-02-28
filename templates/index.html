@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>步数自动提交管理</title>
+  <style>
+    body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; margin: 20px; background: #f7f8fa; color: #222; }
+    .container { max-width: 1280px; margin: 0 auto; }
+    .card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 2px 10px rgba(0,0,0,.05); margin-bottom: 16px; }
+    h1,h2,h3 { margin: 0 0 12px; }
+    .muted { color: #666; font-size: 13px; }
+    .grid { display: grid; gap: 12px; }
+    .grid-2 { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .grid-4 { grid-template-columns: repeat(4,minmax(0,1fr)); }
+    .grid-6 { grid-template-columns: repeat(6,minmax(0,1fr)); }
+    input[type=text], input[type=password], input[type=number], input[type=time] {
+      width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #d0d7de; border-radius: 8px; background: #fff;
+    }
+    label { font-size: 13px; color: #444; display: block; margin-bottom: 4px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .btn { border: 0; border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 13px; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-success { background: #16a34a; color: #fff; }
+    .btn-warning { background: #d97706; color: #fff; }
+    .btn-danger { background: #dc2626; color: #fff; }
+    .btn-gray { background: #4b5563; color: #fff; }
+    .btn-outline { background: #fff; color: #111; border: 1px solid #d0d7de; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid #eee; padding: 8px; text-align: left; vertical-align: top; font-size: 13px; }
+    th { background: #fafafa; }
+    .tag { display:inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+    .tag-ok { background: #dcfce7; color: #166534; }
+    .tag-no { background: #fee2e2; color: #991b1b; }
+    .tag-run { background: #e0e7ff; color: #3730a3; }
+    .small { font-size: 12px; color: #555; }
+    details summary { cursor: pointer; user-select: none; }
+    .flash { padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; font-size: 14px; }
+    .flash-success { background: #ecfdf5; color: #065f46; }
+    .flash-danger { background: #fef2f2; color: #991b1b; }
+    code { background: #f1f5f9; padding: 2px 4px; border-radius: 4px; }
+    @media (max-width: 900px) {
+      .grid-2,.grid-4,.grid-6 { grid-template-columns: 1fr; }
+      table { display:block; overflow:auto; white-space: nowrap; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="card">
+    <h1>步数自动提交管理（Flask）</h1>
+    <div class="muted">
+      当前北京时间：{{ now_bj.strftime('%Y-%m-%d %H:%M:%S') }} ｜ 调度器状态：
+      {% if scheduler_running %}<span class="tag tag-ok">运行中</span>{% else %}<span class="tag tag-no">未运行</span>{% endif %}
+      ｜ 注意：Render 上请使用 <code>gunicorn --workers 1</code>，避免多进程重复触发定时任务。
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <form method="post" action="{{ url_for('jobs_reload') }}">
+        <button class="btn btn-outline" type="submit">重载所有定时任务</button>
+      </form>
+      <a class="btn btn-outline" href="{{ url_for('health') }}" target="_blank">查看 /health</a>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="card">
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category if category in ['success','danger'] else 'success' }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="card">
+    <h2>新增账号</h2>
+    <form method="post" action="{{ url_for('account_add') }}">
+      <div class="grid grid-6">
+        <div><label>账号名称</label><input type="text" name="name" placeholder="例如：主号" value=""></div>
+        <div><label>登录账号（phone）</label><input type="text" name="phone" placeholder="邮箱/手机号"></div>
+        <div><label>密码（pwd）</label><input type="password" name="pwd" placeholder="密码"></div>
+        <div><label>步数（num）</label><input type="number" name="step_num" min="1" value="89888"></div>
+        <div><label>每天提交时间（北京时间）</label><input type="time" name="submit_time" value="00:05"></div>
+        <div>
+          <label>启用</label>
+          <div style="height:38px;display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" name="enabled" checked> <span class="small">立即创建定时任务</span>
+          </div>
+        </div>
+      </div>
+      <details style="margin-top:10px;">
+        <summary>高级设置（一般不用改）</summary>
+        <div class="grid grid-2" style="margin-top:10px;">
+          <div><label>Authorization Token</label><input type="text" name="auth_token" value=""></div>
+          <div><label>API URL</label><input type="text" name="api_url" value=""></div>
+        </div>
+      </details>
+      <div style="margin-top:12px;"><button class="btn btn-primary" type="submit">新增账号</button></div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>账号管理（每个账号独立定时）</h2>
+    <div class="muted">修改账号配置后会自动重建该账号对应的定时任务；不会影响其他账号。</div>
+    {% if accounts %}
+      {% for a in accounts %}
+      <div style="border:1px solid #ececec; border-radius:10px; padding:12px; margin-top:12px;">
+        <form method="post" action="{{ url_for('account_update', account_id=a['id']) }}">
+          <div class="row" style="justify-content:space-between; align-items:flex-start;">
+            <div>
+              <strong>#{{ a['id'] }} {{ a['name'] }}</strong>
+              {% if a['enabled'] %}<span class="tag tag-ok">已启用</span>{% else %}<span class="tag tag-no">已停用</span>{% endif %}
+              <span class="tag tag-run">任务ID: account_submit_{{ a['id'] }}</span>
+              <div class="small" style="margin-top:4px;">
+                下次执行：
+                {% set jid = 'account_submit_' ~ a['id'] %}
+                {% if jobs.get(jid) and jobs.get(jid).next_run_time %}
+                  {{ jobs.get(jid).next_run_time.astimezone(now_bj.tzinfo).strftime('%Y-%m-%d %H:%M:%S %Z') }}
+                {% else %}
+                  --
+                {% endif %}
+                ｜ 密码显示：{{ a['pwd']|pwdmask }}
+              </div>
+            </div>
+            <div class="row">
+              <button class="btn btn-success" formaction="{{ url_for('account_submit', account_id=a['id']) }}" formmethod="post" type="submit">手动提交</button>
+              <button class="btn btn-warning" formaction="{{ url_for('account_test', account_id=a['id']) }}" formmethod="post" type="submit">测试提交</button>
+              <button class="btn btn-danger" formaction="{{ url_for('account_delete', account_id=a['id']) }}" formmethod="post" type="submit" onclick="return confirm('确认删除该账号？');">删除账号</button>
+            </div>
+          </div>
+
+          <div class="grid grid-6" style="margin-top:10px;">
+            <div><label>账号名称</label><input type="text" name="name" value="{{ a['name'] }}"></div>
+            <div><label>登录账号（phone）</label><input type="text" name="phone" value="{{ a['phone'] }}"></div>
+            <div><label>密码（pwd）</label><input type="text" name="pwd" value="{{ a['pwd'] }}"></div>
+            <div><label>步数（num）</label><input type="number" min="1" name="step_num" value="{{ a['step_num'] }}"></div>
+            <div><label>每天提交时间（北京时间）</label><input type="time" name="submit_time" value="{{ a['submit_time'] }}"></div>
+            <div>
+              <label>启用状态</label>
+              <div style="height:38px;display:flex;align-items:center;gap:6px;">
+                <input type="checkbox" name="enabled" {% if a['enabled'] %}checked{% endif %}> <span class="small">启用定时</span>
+              </div>
+            </div>
+          </div>
+
+          <details style="margin-top:10px;">
+            <summary>高级设置（Token / API）</summary>
+            <div class="grid grid-2" style="margin-top:10px;">
+              <div><label>Authorization Token</label><input type="text" name="auth_token" value="{{ a['auth_token'] }}"></div>
+              <div><label>API URL</label><input type="text" name="api_url" value="{{ a['api_url'] }}"></div>
+            </div>
+          </details>
+
+          <div style="margin-top:12px;"><button class="btn btn-primary" type="submit">保存该账号配置</button></div>
+        </form>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="muted">暂无账号，请先新增。</div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between;">
+      <h2>提交日志（最近 50 条）</h2>
+      <form method="post" action="{{ url_for('clear_logs') }}" onsubmit="return confirm('确认清空日志？');">
+        <button class="btn btn-outline" type="submit">清空日志</button>
+      </form>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>时间(北京)</th>
+          <th>账号</th>
+          <th>步数</th>
+          <th>类型</th>
+          <th>状态</th>
+          <th>HTTP/code</th>
+          <th>msg</th>
+          <th>耗时</th>
+          <th>响应/错误</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for l in logs %}
+        <tr>
+          <td>{{ l['id'] }}</td>
+          <td>{{ l['submitted_at_bj'] }}</td>
+          <td>{{ l['account_name'] }}<br><span class="small">{{ l['phone'] }}</span></td>
+          <td>{{ l['step_num'] }}</td>
+          <td><span class="tag tag-run">{{ l['run_type'] }}</span></td>
+          <td>
+            {% if l['status'] == 'success' %}
+              <span class="tag tag-ok">success</span>
+            {% else %}
+              <span class="tag tag-no">failed</span>
+            {% endif %}
+          </td>
+          <td>{{ l['http_status'] or '-' }}/{{ l['response_code'] or '-' }}</td>
+          <td>{{ l['response_msg'] or '-' }}</td>
+          <td>{{ l['duration_ms'] or 0 }} ms</td>
+          <td style="max-width:360px; white-space:normal; word-break:break-all;">
+            {% if l['error_text'] %}
+              <span style="color:#b91c1c;">{{ l['error_text'] }}</span>
+            {% else %}
+              {{ l['response_text'] or '-' }}
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="10" class="muted">暂无日志</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+</body>
+</html>
